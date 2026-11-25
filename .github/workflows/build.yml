@@ -1,0 +1,62 @@
+name: Build Classic98
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  android:
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/saschpe/android-ndk:34-jdk17.0.8_7-ndk25.2.9519653-cmake3.22.1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Preparar codigo
+        shell: bash
+        run: |
+          apt install -y make wget unzip
+          unzip -q Classic98-source.zip
+          cd classicube
+          mkdir build-tools
+          wget -q https://github.com/ClassiCube/rpi-compiling-stuff/raw/main/build-tools.zip
+          unzip -q build-tools.zip -d build-tools
+          chmod +x build-tools/aapt build-tools/dx build-tools/zipalign
+          keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Classic98, O=Classic98, C=PE"
+      - name: Compilar APK
+        shell: bash
+        run: |
+          cd classicube
+          make android EXTRA_CFLAGS="-fno-stack-protector"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Classic98-apk
+          path: classicube/Classic98-signed.apk
+
+  windows:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Preparar codigo
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install gcc-mingw-w64-i686 unzip
+          unzip -q Classic98-source.zip
+      - name: Compilar Windows x86
+        shell: bash
+        run: |
+          cd classicube
+          CF="-fno-stack-protector -DCC_NOMAIN -fno-ident"
+          LF="-nostartfiles -Wl,-e_main_real"
+          make windows RELEASE=1 TARGET=Classic98-Direct3D9 CC=i686-w64-mingw32-gcc EXTRA_CFLAGS="$CF" EXTRA_LDFLAGS="$LF"
+          make windows clean
+          make windows RELEASE=1 TARGET=Classic98-OpenGL CC=i686-w64-mingw32-gcc EXTRA_CFLAGS="$CF -DCC_GFX_BACKEND=CC_GFX_BACKEND_GL1" EXTRA_LDFLAGS="$LF"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Classic98-Windows-x86
+          path: |
+            classicube/Classic98-Direct3D9.exe
+            classicube/Classic98-OpenGL.exe
